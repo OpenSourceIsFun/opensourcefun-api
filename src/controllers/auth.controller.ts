@@ -1,0 +1,198 @@
+import { Body, Controller, Post } from '@nestjs/common';
+import { ApiOkResponse, ApiTags, ApiCreatedResponse } from '@nestjs/swagger';
+import {
+  MagicCodeTypes,
+  RewardActionTypes,
+  RewardSourceTypes
+} from '@prisma/client';
+
+import { IUserContext } from 'abstractions/interfaces';
+import {
+  UsersService,
+  MagicCodesService,
+  JwtService,
+  PostmarkService,
+  RewardsService
+} from 'services';
+import { MagicCodeModel } from 'models';
+import {
+  SendCodeDto,
+  VerifyCodeDto,
+  AuthorizeDto,
+  RegisterDto
+} from 'dto/auth';
+import {
+  EmailAlreadyUsedException,
+  IncorrectEmailOrCodeException,
+  IncorrectEmailOrPasswordException,
+  NotFoundException
+} from 'exceptions';
+
+@Controller('auth')
+@ApiTags('auth')
+export class AuthController {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly usersService: UsersService,
+    private readonly rewardsService: RewardsService,
+    private readonly magicCodesService: MagicCodesService,
+    private readonly postmarkService: PostmarkService
+  ) {}
+
+  @Post('/send-code')
+  @ApiOkResponse({ type: MagicCodeModel })
+  async sendCode(
+    @Body() { email, isAuthorize }: SendCodeDto
+  ): Promise<MagicCodeModel> {
+    const user = await this.usersService.getUserByEmail(email);
+
+    if (!user) {
+      const code = await this.magicCodesService.createMagicCode({
+        email,
+        type: MagicCodeTypes.SIGN_UP
+      });
+
+      await this.postmarkService.sendMagicCode(email, code);
+
+      return {
+        email,
+        type: MagicCodeTypes.SIGN_UP
+      };
+    }
+
+    if (isAuthorize) {
+      const code = await this.magicCodesService.createMagicCode({
+        email,
+        type: MagicCodeTypes.SIGN_IN
+      });
+
+      await this.postmarkService.sendMagicCode(email, code);
+    }
+
+    return {
+      email,
+      type: MagicCodeTypes.SIGN_IN
+    };
+  }
+
+  @Post('/verify-code')
+  @ApiOkResponse({ type: MagicCodeModel })
+  async verifyCode(
+    @Body() { email, code }: VerifyCodeDto
+  ): Promise<MagicCodeModel> {
+    const lastMagicCode = await this.magicCodesService.getLastCodeByEmail(
+      email
+    );
+
+    if (!lastMagicCode)
+      throw new NotFoundException(
+        'MagicCodeByUserEmail',
+        email,
+        `No code found for email: ${email}`
+      );
+
+    const isValidCode = await this.magicCodesService.compareCode(
+      code,
+      lastMagicCode.hashedCode,
+      lastMagicCode.expiresAt
+    );
+
+    if (!isValidCode) throw new IncorrectEmailOrCodeException();
+
+    if (lastMagicCode.type === MagicCodeTypes.SIGN_IN) {
+      await this.magicCodesService.deleteCodesByEmail(email);
+
+      const user = await this.usersService.getUserByEmail(email);
+
+      if (!user) throw new IncorrectEmailOrPasswordException();
+
+      const userContext: IUserContext = {
+        id: user.id
+      };
+
+      const token = await this.jwtService.signAsync(userContext);
+
+      return {
+        email,
+        token,
+        type: MagicCodeTypes.SIGN_IN
+      };
+    }
+
+    return {
+      email,
+      type: MagicCodeTypes.SIGN_UP
+    };
+  }
+
+  @Post('/authorize')
+  @ApiOkResponse({ type: String })
+  async authorize(@Body() { email, password }: AuthorizeDto): Promise<string> {
+    const user = await this.usersService.getUserByEmail(email);
+
+    if (!user) throw new IncorrectEmailOrPasswordException();
+
+    const isValidPassword = await this.usersService.comparePassword(
+      password,
+      user.password
+    );
+
+    if (!isValidPassword) throw new IncorrectEmailOrPasswordException();
+
+    const userContext: IUserContext = {
+      id: user.id
+    };
+
+    return this.jwtService.signAsync(userContext);
+  }
+
+  @Post('/register')
+  @ApiCreatedResponse({ type: String })
+  async register(
+    @Body() { code, password, name, referralCode, email }: RegisterDto
+  ): Promise<string> {
+    const verifyResult = await this.verifyCode({ email, code });
+
+    if (verifyResult.type !== MagicCodeTypes.SIGN_UP)
+      throw new IncorrectEmailOrCodeException();
+
+    const existUser = await this.usersService.getUserByEmail(email);
+
+    if (existUser) throw new EmailAlreadyUsedException();
+
+    const user = await this.usersService.createUser({
+      email,
+      password,
+      name,
+      inviteReferralCode: referralCode
+    });
+
+    const userContext: IUserContext = {
+      id: user.id
+    };
+
+    await this.rewardsService.createReward({
+      userId: user.id,
+      source: RewardSourceTypes.INNER,
+      action: RewardActionTypes.REGISTRATION
+    });
+
+    if (referralCode) {
+      const referralUser = await this.usersService.getUserByReferralCode(
+        referralCode
+      );
+
+      if (referralUser) {
+        await this.rewardsService.createReward({
+          userId: referralUser.id,
+          source: RewardSourceTypes.INNER,
+          action: RewardActionTypes.REFERRAL_REGISTRATION
+        });
+      }
+    }
+
+    await this.magicCodesService.deleteCodesByEmail(email);
+
+    return this.jwtService.signAsync(userContext);
+  }
+}

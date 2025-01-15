@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Project" ALTER COLUMN "token" DROP NOT NULL,
+ALTER COLUMN "network" DROP NOT NULL;

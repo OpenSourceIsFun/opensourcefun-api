@@ -1,0 +1,180 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "darwin", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String              @id @default(cuid())
+  email                 String              @unique
+  role                  UserRoleTypes       @default(USER)
+  name                  String?
+  password              String?
+  telegram              String?
+  discord               String?
+  twitter               String?
+  kycId                 String?             @unique
+  kycStatus             KycStatusTypes      @default(NOT_VERIFIED)
+  kycCallbacks          KycCallback[]
+  kycResults            KycResult[]
+  myReferralCode        ReferralCode?
+  inviteReferralCode    String?
+  rewards               Reward[]
+  wallets               Wallet[]
+  walletLogs            WalletLog[]
+  asAdminProject        Project?            @relation("asAdminProject")
+  asOwnerProject        Project?            @relation("asOwnerProject")
+  updatedAt             DateTime            @updatedAt
+  createdAt             DateTime            @default(now())
+}
+
+model ReferralCode {
+  id                    String              @id @default(cuid())
+  value                 String
+  description           String?
+  user                  User?               @relation(fields: [userId], references: [id])
+  userId                String?             @unique
+  createdAt             DateTime            @default(now())
+}
+
+model Wallet {
+  id                    String              @id @default(cuid())
+  name                  String
+  value                 String
+  user                  User                @relation(fields: [userId], references: [id])
+  userId                String
+  createdAt             DateTime            @default(now())
+}
+
+model WalletLog {
+  id                    String              @id @default(cuid())
+  name                  String
+  network               String
+  address               String
+  user                  User                @relation(fields: [userId], references: [id])
+  userId                String
+  connectAt             DateTime            @default(now())
+}
+
+model MagicCode {
+  id                    String              @id @default(uuid())
+  hashedCode            String
+  email                 String
+  type                  MagicCodeTypes      @default(SIGN_UP)
+  expiresAt             DateTime
+  createdAt             DateTime            @default(now())
+}
+
+model File {
+  id                    String              @id @default(uuid())
+  name                  String?
+  folder                String?
+  extension             String
+  asLogoProject         Project?            @relation("asLogoProject")
+  asBannerProject       Project?            @relation("asBannerProject")
+  createdAt             DateTime            @default(now())
+}
+
+model KycCallback {
+  id                    String              @id @default(cuid())
+  kycId                 String
+  user                  User                @relation(fields: [userId], references: [id])
+  userId                String
+  event                 String
+  createdAt             DateTime            @default(now())
+}
+
+model KycResult {
+  id                    String              @id @default(cuid())
+  kycId                 String
+  user                  User                @relation(fields: [userId], references: [id])
+  userId                String
+  firstName             String
+  middleName            String?
+  lastName              String?
+  gender                String?
+  country               String?
+  dateOfBirth           String?
+  createdAt             DateTime            @default(now())
+}
+
+model Project {
+  id                    String              @id @default(cuid())
+  alias                 String              @unique
+  token                 String?
+  network               String?
+  title                 String
+  address               String?
+  admin                 User?               @relation("asAdminProject", fields: [adminId], references: [id])
+  adminId               String?             @unique
+  owner                 User?               @relation("asOwnerProject", fields: [ownerId], references: [id])
+  ownerId               String?             @unique
+  logoFile              File?               @relation("asLogoProject", fields: [logoFileId], references: [id])
+  logoFileId            String?             @unique
+  bannerFile            File?               @relation("asBannerProject", fields: [bannerFileId], references: [id])
+  bannerFileId          String?             @unique
+  overview              String?
+  description           String?
+  majorContributor      String?
+  preferredExperience   String?
+  totalAllocation       String?
+  telegram              String?
+  discord               String?
+  twitter               String?
+  github                String?
+  siteUrl               String?
+  isPublic              Boolean             @default(false)
+
+  createdAt             DateTime            @default(now())
+}
+
+model Reward {
+  id                    String              @id @default(cuid())
+  user                  User                @relation(fields: [userId], references: [id])
+  userId                String
+  source                RewardSourceTypes
+  action                RewardActionTypes
+  prize                 Int
+  createdAt             DateTime            @default(now())
+}
+
+enum UserRoleTypes {
+  ADMIN
+  OWNER
+  USER
+}
+
+enum RewardSourceTypes {
+  INNER
+  GLEAM
+  KYC
+}
+
+enum RewardActionTypes {
+  REGISTRATION
+  BINANCE_WALLET
+  POLKADOT_WALLET
+  KYC_ACCEPTED
+  SURVEY_COMPLETED
+  TWITTER_FOLLOW
+  TELEGRAM_FOLLOW
+  BLOG_FOLLOW
+  REFERRAL_REGISTRATION
+}
+
+enum MagicCodeTypes {
+  SIGN_IN
+  SIGN_UP
+}
+
+enum KycStatusTypes {
+  NOT_VERIFIED
+  IN_PROGRESS
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
