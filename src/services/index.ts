@@ -2,7 +2,6 @@ export * from './external';
 export * from './distributor';
 
 export * from './users.service';
-export * from './kyc.service';
 export * from './wallets.service';
 export * from './wallet-logs.service';
 export * from './rewards.service';

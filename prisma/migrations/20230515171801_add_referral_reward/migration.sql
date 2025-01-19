@@ -1,2 +1,0 @@
--- AlterEnum
-ALTER TYPE "RewardActionTypes" ADD VALUE 'REFERRAL_REGISTRATION';

@@ -34,7 +34,9 @@ export class AnalyticsService {
     type: AnalyticsEventTypeEnum
   ): Promise<void> {
     try {
-      await this.sendEventToGetresponse(email, type);
+      console.log('sendEvent', { email, type });
+
+      // await this.sendEventToGetresponse(email, type);
     } catch (e) {
       console.error(e);
     }

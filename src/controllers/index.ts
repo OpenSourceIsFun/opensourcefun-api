@@ -4,7 +4,6 @@ export * from './users.controller';
 export * from './wallets.controller';
 export * from './wallet-logs.controller';
 export * from './rewards.controller';
-export * from './kyc.controller';
 export * from './files.controller';
 export * from './projects.controller';
 export * from './analytics.controller';
